@@ -1,8 +1,17 @@
 <html>
 <head>
 <title>Pico SSOCR</title>
+
 <style>
+
+.digit-canvas {
+    border-style: solid; 
+    display: inline-block; 
+    vertical-align:top;
+}
+
 </style>
+
 <script>
 
 //////////////////////////////////////////////////////////
@@ -13,6 +22,7 @@ const NBR_PIXELS_PER_SEGMENT_X = 3;
 const NBR_PIXELS_PER_SEGMENT_Y = 3;
 
 const NBR_SEGMENTS = 8; // Including background
+
 const Segment = {
     Back: 0,
     Top: 1,
@@ -25,28 +35,79 @@ const Segment = {
 }
 
 //////////////////////////////////////////////////////////
-// Seven Segment Digit Class
+// Seven Segment Digit Drawing Class (graphical)
 //////////////////////////////////////////////////////////
-class SSDigit {
+class SSDigitDrawing {
     offset = 5;  // From edge (like padding)
     space  = 2;  // Between segments
     width  = 40; // With of segment
     height = 14; // Height of segment
 
-    constructor(canvasId) {
-        this.canvas = document.getElementById(canvasId);
+    constructor(canvas) {
+        this.canvas = canvas;
         this.ctx = this.canvas.getContext("2d");
         this.canvas.width  =   this.width + 2*this.offset + 2*this.space + this.height;
         this.canvas.height = 2*this.width + 2*this.offset + 4*this.space + this.height;
-        this.segmentColor = [];
-        for (var i = 0 ; i < NBR_SEGMENTS ; i++) {
-            this.segmentColor.push("white");
-        }
+        this.segmentColor = new Array(NBR_SEGMENTS);
+        this.segmentLineColor = new Array(NBR_SEGMENTS);
+        this.segmentLineWidth = new Array(NBR_SEGMENTS);
+        this.resetStyle();
         this.draw();
+    }
+
+    onClick(callback) {
+        var o = this.offset;
+        var s = this.space;
+        var w = this.width;
+        var h = this.height;
+        this.canvas.addEventListener('mousedown', function (e) {
+            var x = event.offsetX;
+            var y = event.offsetY;
+            var selected = Segment.Back;
+            if ((y > o) && (y < (o+h)) && 
+                (x > (o+h)) && (x < (o+h+w))) {
+                selected = Segment.Top;
+            } else if ((y > (o+h)) && (y < (o+h+w)) && 
+                (x > o) && (x < (o+h))) {
+                selected = Segment.TopLeft;
+            } else if ((y > (o+h)) && (y < (o+h+w)) && 
+                (x > (o+w+2*s)) && (x < (o+w+2*s+h))) {
+                selected = Segment.TopRight;
+            } else if ((y > (o+w+2*s)) && (y < (o+w+2*s+h)) && 
+                (x > (o+h)) && (x < (o+h+w))) {
+                selected = Segment.Middle;
+            } else if ((y > (o+h+w)) && (y < (o+h+w+w)) && 
+                (x > o) && (x < (o+h))) {
+                selected = Segment.BottomLeft;
+            } else if ((y > (o+h+w)) && (y < (o+h+w+w)) && 
+                (x > (o+w+2*s)) && (x < (o+w+2*s+h))) {
+                selected = Segment.BottomRight;
+            } else if ((y > (o+2*w+4*s)) && (y < (o+2*w+4*s+h)) && 
+                (x > (o+h)) && (x < (o+h+w))) {
+                selected = Segment.Bottom;
+            }
+            callback(selected);
+        }); 
     }
 
     setColor(segment, color) {
         this.segmentColor[segment] = color;
+    }
+
+    setLineColor(segment, color) {
+        this.segmentLineColor[segment] = color;
+    }
+
+    setLineWidth(segment, width) {
+        this.segmentLineWidth[segment] = width;
+    }
+
+    resetStyle() {
+        for (var i = 0 ; i < NBR_SEGMENTS ; i++) {
+            this.segmentColor[i] = "white";
+            this.segmentLineColor[i] = "black";
+            this.segmentLineWidth[i] = 1;
+        }
     }
 
     draw() {
@@ -64,34 +125,35 @@ class SSDigit {
 
         // Top
         this.drawSegment(h/2+o+s, h/2+o,
-                         false, this.segmentColor[Segment.Top]);
+                         false, Segment.Top);
         // Top left
         this.drawSegment(h/2+o, h/2+o+s,
-                         true, this.segmentColor[Segment.TopLeft]);
+                         true, Segment.TopLeft);
         // Top right
         this.drawSegment(h/2+o + w + 2*s, h/2+o+s,
-                         true, this.segmentColor[Segment.TopRight]);
+                         true, Segment.TopRight);
         // Middle
         this.drawSegment(h/2+o+s, h/2+o + w + 2*s,
-                         false, this.segmentColor[Segment.Middle]);
+                         false, Segment.Middle);
         // Botton left
         this.drawSegment(h/2+o, h/2+o + w + 3*s,
-                         true, this.segmentColor[Segment.BottomLeft]);
+                         true, Segment.BottomLeft);
         // Botton right
         this.drawSegment(h/2+o + w + 2*s, h/2+o + w + 3*s,
-                         true, this.segmentColor[Segment.BottomRight]);
+                         true, Segment.BottomRight);
         // Botton
         this.drawSegment(h/2+o+s, h/2+o + 2 * w + 4*s,
-                         false, this.segmentColor[Segment.Bottom]);
+                         false, Segment.Bottom);
     }
 
-    drawSegment(x, y, rotate, color) {
+    drawSegment(x, y, rotate, segment) {
         var ctx = this.ctx;
         var w = this.width;
         var h = this.height; 
 
-        ctx.fillStyle = color;
-        ctx.strokeStyle = "black";
+        ctx.fillStyle = this.segmentColor[segment];
+        ctx.strokeStyle = this.segmentLineColor[segment];
+        ctx.lineWidth = this.segmentLineWidth[segment];
         ctx.beginPath();
         ctx.moveTo(x, y);
         if (rotate) {
@@ -115,9 +177,59 @@ class SSDigit {
 }
 
 //////////////////////////////////////////////////////////
+// Seven Segment Digit Data Class
+//////////////////////////////////////////////////////////
+class Coordinate {
+    x = 0;
+    y = 0;
+}
+
+class SSDigitData {
+    segmentCoordinate = [];
+    segmentColor = [];
+
+    constructor(canvasId) {
+        for (var i = 0 ; i < NBR_SEGMENTS ; i++) {
+            this.segmentPosition.push(undefined);
+            this.segmentColor.push(undefined);
+        }
+    }
+}
+
+//////////////////////////////////////////////////////////
+// Seven Segment Digits
+//////////////////////////////////////////////////////////
+class SSDigits {
+    digitData = [];
+
+    constructor(parentId, nbrIntegers, nbrDecimals) {
+        var parent = document.getElementById(parentId);
+        for (var i = 0 ; i < nbrIntegers ; i++) {
+            var canvas = document.createElement("canvas");
+            parent.appendChild(canvas);
+            var digit = new SSDigitDrawing(canvas);
+        }
+    }
+}
+
+
+//////////////////////////////////////////////////////////
 // Functions
 //////////////////////////////////////////////////////////
 window.onload = function() {
+    // Load image
+    var img = document.getElementById("ss-image");
+    var canvas = document.getElementById("ss-canvas");
+    var ctx = canvas.getContext("2d");
+    ctx.canvas.width = img.width;
+    ctx.canvas.height = img.height;
+    ctx.drawImage(img, 0, 0, img.width, img.height);
+
+    // Setup digits
+    var nbrInts = document.getElementById("integers").value;
+    digits = new SSDigits("digits", nbrInts, 0);
+}
+function test() {
     var img = document.getElementById("ss-image");
     var canvas = document.getElementById("ss-canvas");
     var ctx = canvas.getContext("2d");
@@ -125,6 +237,8 @@ window.onload = function() {
     ctx.canvas.height = img.height;
     ctx.drawImage(img, 0, 0, img.width, img.height);
     canvas.addEventListener('mousedown', function (e) {
+        drawMarker(ctx, event.offsetX, event.offsetY, "red");
+        return;
         var imgD = ctx.getImageData(event.offsetX - Math.round(NBR_PIXELS_PER_SEGMENT_X/2),
                                     event.offsetY - Math.round(NBR_PIXELS_PER_SEGMENT_Y/2),
                                     NBR_PIXELS_PER_SEGMENT_X,
@@ -154,69 +268,32 @@ window.onload = function() {
     });
     digit1 = new SSDigit("digit-canvas");
     digit2 = new SSDigit("digit-canvasB");
-    //digit2.draw();
-    
+    digit2.setLineColor(Segment.Bottom, "red");
+    digit2.setLineWidth(Segment.Bottom, 3);
+    digit2.draw();
+    digit1.onClick(function (segment) {
+        alert(segment);
+    }); 
 }
 
-function plotSegment(ctx, x, y, width, height, rotate, color) {
+function drawMarker(ctx, x, y, color) {
+    ctx.strokeStyle = color;
 
-    ctx.fillStyle = color;
-    ctx.strokeStyle = "black";
+    // Horizontal
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    if (rotate) {
-        ctx.lineTo(x + height/2, y + height/2);
-        ctx.lineTo(x + height/2, y + (width - height/2));
-        ctx.lineTo(x, y + width);
-        ctx.lineTo(x - height/2, y + (width - height/2));
-        ctx.lineTo(x - height/2, y + height/2);
-    } else {
-        ctx.lineTo(x + height/2, y - height/2);
-        ctx.lineTo(x + (width - height/2), y - height/2);
-        ctx.lineTo(x + width, y);
-        ctx.lineTo(x + (width - height/2), y + height/2);
-        ctx.lineTo(x + height/2, y + height/2);
-    }
-    ctx.lineTo(x, y);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(x - NBR_PIXELS_PER_SEGMENT_X, y);
+    ctx.lineTo(x + NBR_PIXELS_PER_SEGMENT_X, y);
+    ctx.closePath(); 
+    ctx.stroke();
+
+    // Vertical
+    ctx.beginPath();
+    ctx.moveTo(x, y - NBR_PIXELS_PER_SEGMENT_Y);
+    ctx.lineTo(x, y + NBR_PIXELS_PER_SEGMENT_Y);
+    ctx.closePath();  
     ctx.stroke();
 }
 
-function plotDigit(canvasId, back, top, topLeft, topRight, middle, bottomLeft, bottomRight, bottom) {
-    var canvas = document.getElementById(canvasId);
-    var ctx = canvas.getContext("2d");
-
-    var offset = 5;  // From edge (like padding)
-    var space = 2;   // Between segments
-    var width = 40;  // With of segment
-    var height = 14; // Height of segment
-
-    canvas.width  =   width + 2*offset + 2*space + height;
-    canvas.height = 2*width + 2*offset + 4*space + height;
-
-    // Fill background
-    ctx.fillStyle=back;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    //////////////////////////////
-    // Plot the segments
-
-    // Top
-    plotSegment(ctx, height/2+offset+space, height/2+offset, width, height, false, top);
-    // Top left
-    plotSegment(ctx, height/2+offset, height/2+offset+space, width, height, true, topLeft);
-    // Top right
-    plotSegment(ctx, height/2+offset + width + 2*space, height/2+offset+space, width, height, true, topRight);
-    // Middle
-    plotSegment(ctx, height/2+offset+space, height/2+offset + width + 2*space, width, height, false, middle);
-    // Botton left
-    plotSegment(ctx, height/2+offset, height/2+offset + width + 3*space, width, height, true, bottomLeft);
-    // Botton right
-    plotSegment(ctx, height/2+offset + width + 2*space, height/2+offset + width + 3*space, width, height, true, bottomRight);
-    // Botton
-    plotSegment(ctx, height/2+offset+space, height/2+offset + 2 * width + 4*space, width, height, false, bottom);
-}
 
 </script>
 </head>
@@ -228,8 +305,15 @@ function plotDigit(canvasId, back, top, topLeft, topRight, middle, bottomLeft, b
         <canvas id="ss-canvas"></canvas>
     </div>
     <div style="display:inline-block; vertical-align:top;">
-        <canvas id="digit-canvas" style="border-style: solid; display: inline-block; vertical-align:top;" height="125" width="125"></canvas>
-        <canvas id="digit-canvasB" style="border-style: solid; display: inline-block; vertical-align:top;" height="125" width="125"></canvas>
+        <label for="integers">Integers:</label>
+        <input type="number" id="integers" name="integers" min="1" max="10" value="5">
+        <label for="decimals">Decimals:</label>
+        <input type="number" id="decimals" name="decimals" min="1" max="10" value="3">
+        <br>
+        <div id="digits" style="display:inline-block; vertical-align:top;">
+            <!--<canvas id="digit-canvas" class="digit-canvas"></canvas>
+            <canvas id="digit-canvasB" class="digit-canvas"></canvas>-->
+        </div>
         <br>
         <div style="border-style: solid;">
             Bakground
