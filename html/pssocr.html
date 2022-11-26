@@ -197,23 +197,44 @@ class SSDigitDrawing {
 }
 
 //////////////////////////////////////////////////////////
-// Seven Segment Digit Coordinates Class
+// Seven Segment Digit Data Class
 //////////////////////////////////////////////////////////
 class Coordinate {
-    x = 0;
-    y = 0;
     constructor(x, y) {
         this.x = x;
         this.y = y;
     }
 }
 
-class SSDigitCoordinates {
+class Color {
+    constructor(pixelData) {
+        // Calculate average red, green and blue value
+        var r = 0, g = 0, b = 0, count = 0;
+        for (var i = 0; i < pixelData.length; i+=4) {
+            r += pixelData[i];
+            g += pixelData[i+1];
+            b += pixelData[i+2];
+            // i+3 gamma is no used
+            count += 1;
+        }
+        this.r = r / count;
+        this.b = b / count;
+        this.g = g / count;    
+    }
+
+    colorStr() {
+        return "rgb(" + this.r + "," + this.g + "," + this.b +")";
+    }
+}
+
+class SSDigitData {
     segmentCoordinate = [];
+    segmentColor = [];
 
     constructor() {
         for (var i = 0 ; i < NBR_SEGMENTS ; i++) {
             this.segmentCoordinate.push(undefined);
+            this.segmentColor.push(undefined);
         }
     }
 
@@ -224,19 +245,35 @@ class SSDigitCoordinates {
     setCoordinate(segment, x, y) {
         this.segmentCoordinate[segment] = new Coordinate(x,y);
     }
+
+    getColor(segment) {
+        return this.segmentColor[segment];
+    }
+
+    setColor(segment, pixelData) {
+        this.segmentColor[segment] = new Color(pixelData);
+    }
 }
 
-class SSDigitCoordinateCollection {
+class SSDigitDataCollection {
     digits = [];
     decimalPosition = undefined;
 
     constructor(nbrIntegers, nbrDecimals) {
         for (var i = 0 ; i < (nbrIntegers+nbrDecimals) ; i++) {
-            this.digits.push(new SSDigitCoordinates());
+            this.digits.push(new SSDigitData());
         }
         if (nbrDecimals > 0) {
-            this.decimalPosition = nbrIntegers;
+            this.decimalPosition = nbrIntegers - 1;
         }
+    }
+
+    nbrDigits() {
+        return this.digits.length;
+    }
+
+    getDecimalPosition() {
+        return this.decimalPosition;
     }
 
     getDigit(index) {
@@ -248,17 +285,20 @@ class SSDigitCoordinateCollection {
 // Seven Segment Digits
 //////////////////////////////////////////////////////////
 class SSDigits {
-    digitDatas = [];
+    digits = undefined;
     digitDrawings = [];
 
     selectedDigitIndex = undefined;
     selectedSegment = undefined;
 
-    constructor(parentId, nbrIntegers, nbrDecimals, imageId, imageCanvasId) {
+    constructor(parentId, digits, imageId, imageCanvasId) {
+        this.digits = digits;
+
         //////////////////////////////
         // Setup all Digits
         var parent = document.getElementById(parentId);
-        for (var i = 0 ; i < (nbrIntegers+nbrDecimals) ; i++) {
+        for (var i = 0 ; i < digits.nbrDigits() ; i++) {
+
             var canvas = document.createElement("canvas");
             canvas.setAttribute("class", "digit-canvas");
             parent.appendChild(canvas);
@@ -271,7 +311,7 @@ class SSDigits {
             })(i, this);
 
             // Add decimal dot if needed
-            if ((i == (nbrIntegers - 1)) && (nbrDecimals > 0)) {
+            if (i == digits.getDecimalPosition()) {
                 var dotCanvas = document.createElement("canvas");
                 dotCanvas.setAttribute("class", "digit-canvas");
                 parent.appendChild(dotCanvas);
@@ -283,14 +323,16 @@ class SSDigits {
         // Setup image
         var img = document.getElementById(imageId);
         var canvas = document.getElementById(imageCanvasId);
-        var ctx = canvas.getContext("2d");
+        var ctx = canvas.getContext("2d", { willReadFrequently: true });
+        this.image = img;
+        this.imageCtx = ctx;
         canvas.width = img.width;
         canvas.height = img.height;
-        ctx.drawImage(img, 0, 0, img.width, img.height);
         var self = this;
         canvas.addEventListener('mousedown', function (e) {
             self.clickedImageCallback(event.offsetX, event.offsetY);
         });
+        this.drawImage();
 
     }
 
@@ -301,19 +343,74 @@ class SSDigits {
     }
 
     clickedImageCallback(x, y) {
-        alert(x + " " + y);
+        if (this.selectedSegment != undefined) {
+            // Set coordinate
+            this.digits.getDigit(this.selectedDigitIndex).setCoordinate(this.selectedSegment, x, y);
+
+            // Get color from image
+            this.drawImage();
+            var imgD = this.imageCtx.getImageData(
+                x - Math.round(NBR_PIXELS_PER_SEGMENT_X/2),
+                y - Math.round(NBR_PIXELS_PER_SEGMENT_Y/2),
+                NBR_PIXELS_PER_SEGMENT_X,
+                NBR_PIXELS_PER_SEGMENT_Y);
+
+            // Set color
+            this.digits.getDigit(this.selectedDigitIndex).setColor(this.selectedSegment, imgD.data);
+        }
+        this.draw();
+    }
+
+    drawImage() {
+        var img = this.image;
+        this.imageCtx.drawImage(img, 0, 0, img.width, img.height);
     }
 
     draw() {
-        for (var i = 0 ; i < this.digitDrawings.length ; i++) {
-            var dd = this.digitDrawings[i];
+        for (var di = 0 ; di < this.digitDrawings.length ; di++) {
+            var dd = this.digitDrawings[di];
             dd.resetStyle();
-            if (this.selectedDigitIndex == i) {
+            if (this.selectedDigitIndex == di) {
                 dd.setLineColor(this.selectedSegment , "red");
                 dd.setLineWidth(this.selectedSegment , 3);
             }
+            var digit = this.digits.getDigit(di);
+            for (var si = 0 ; si < NBR_SEGMENTS ; si++) {
+                var color = digit.getColor(si);
+                if (color != undefined) {
+                    dd.setColor(si, color.colorStr());
+                }
+                // Mark image
+                var coordinate = digit.getCoordinate(si);
+                if (coordinate != undefined) {
+                    var markerColor = "blue" 
+                    if (this.selectedDigitIndex == di && this.selectedSegment == si) {
+                        markerColor = "red";
+                    }
+                    this.drawMarker(coordinate.x, coordinate.y, markerColor);
+                }
+            }
             dd.draw();
         }
+    }
+
+    drawMarker(x, y, color) {
+        var ctx = this.imageCtx;
+        ctx.strokeStyle = color;
+
+        // Horizontal
+        ctx.beginPath();
+        ctx.moveTo(x - NBR_PIXELS_PER_SEGMENT_X, y);
+        ctx.lineTo(x + NBR_PIXELS_PER_SEGMENT_X, y);
+        ctx.closePath(); 
+        ctx.stroke();
+
+        // Vertical
+        ctx.beginPath();
+        ctx.moveTo(x, y - NBR_PIXELS_PER_SEGMENT_Y);
+        ctx.lineTo(x, y + NBR_PIXELS_PER_SEGMENT_Y);
+        ctx.closePath();  
+        ctx.stroke();
     }
 }
 
@@ -324,8 +421,8 @@ class SSDigits {
 window.onload = function() {
     var nbrInts = parseInt(document.getElementById("integers").value);
     var nbrDec = parseInt(document.getElementById("decimals").value);
-    var coordinates = new SSDigitCoordinateCollection(nbrInts, nbrDec);
-    digits = new SSDigits("digits", nbrInts, nbrDec, "ss-image", "ss-canvas");
+    var digits = new SSDigitDataCollection(nbrInts, nbrDec);
+    digits = new SSDigits("digits", digits, "ss-image", "ss-canvas");
 }
 function test() {
     var img = document.getElementById("ss-image");
