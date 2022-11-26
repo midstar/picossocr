@@ -6,8 +6,8 @@
 
 .digit-canvas {
     border-style: solid; 
-    display: inline-block; 
-    vertical-align:top;
+    border-width: 1px;
+    margin-right: 1;
 }
 
 </style>
@@ -108,6 +108,8 @@ class SSDigitDrawing {
             this.segmentLineColor[i] = "black";
             this.segmentLineWidth[i] = 1;
         }
+        // Default no visible line in background
+        this.segmentLineColor[Segment.Back] = this.segmentColor[Segment.Back];
     }
 
     draw() {
@@ -116,9 +118,13 @@ class SSDigitDrawing {
         var w = this.width;
         var h = this.height;
 
-        // Fill background
+        // Fill background (also clears at redraw)
         this.ctx.fillStyle=this.segmentColor[Segment.Back];
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.strokeStyle = this.segmentLineColor[Segment.Back];
+        this.ctx.lineWidth = this.segmentLineWidth[Segment.Back];
+        this.ctx.rect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fill();
+        this.ctx.stroke();
 
         //////////////////////////////
         // Draw the segments
@@ -174,25 +180,67 @@ class SSDigitDrawing {
         ctx.fill();
         ctx.stroke();
     }
+
+    drawDot(canvas) {
+        var o = this.offset;
+        var s = this.space;
+        var w = this.width;
+        var h = this.height;
+
+        canvas.width  =  h + 2*o;
+        canvas.height = this.canvas.height;
+        var ctx = canvas.getContext("2d");
+        ctx.fillStyle = "black";
+        ctx.fillRect(o, canvas.height - o - h, h, h);
+        
+    }
 }
 
 //////////////////////////////////////////////////////////
-// Seven Segment Digit Data Class
+// Seven Segment Digit Coordinates Class
 //////////////////////////////////////////////////////////
 class Coordinate {
     x = 0;
     y = 0;
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+    }
 }
 
-class SSDigitData {
+class SSDigitCoordinates {
     segmentCoordinate = [];
-    segmentColor = [];
 
-    constructor(canvasId) {
+    constructor() {
         for (var i = 0 ; i < NBR_SEGMENTS ; i++) {
-            this.segmentPosition.push(undefined);
-            this.segmentColor.push(undefined);
+            this.segmentCoordinate.push(undefined);
         }
+    }
+
+    getCoordinate(segment) {
+        return this.segmentCoordinate[segment];
+    }
+
+    setCoordinate(segment, x, y) {
+        this.segmentCoordinate[segment] = new Coordinate(x,y);
+    }
+}
+
+class SSDigitCoordinateCollection {
+    digits = [];
+    decimalPosition = undefined;
+
+    constructor(nbrIntegers, nbrDecimals) {
+        for (var i = 0 ; i < (nbrIntegers+nbrDecimals) ; i++) {
+            this.digits.push(new SSDigitCoordinates());
+        }
+        if (nbrDecimals > 0) {
+            this.decimalPosition = nbrIntegers;
+        }
+    }
+
+    getDigit(index) {
+        return this.digits[index];
     }
 }
 
@@ -200,14 +248,71 @@ class SSDigitData {
 // Seven Segment Digits
 //////////////////////////////////////////////////////////
 class SSDigits {
-    digitData = [];
+    digitDatas = [];
+    digitDrawings = [];
 
-    constructor(parentId, nbrIntegers, nbrDecimals) {
+    selectedDigitIndex = undefined;
+    selectedSegment = undefined;
+
+    constructor(parentId, nbrIntegers, nbrDecimals, imageId, imageCanvasId) {
+        //////////////////////////////
+        // Setup all Digits
         var parent = document.getElementById(parentId);
-        for (var i = 0 ; i < nbrIntegers ; i++) {
+        for (var i = 0 ; i < (nbrIntegers+nbrDecimals) ; i++) {
             var canvas = document.createElement("canvas");
+            canvas.setAttribute("class", "digit-canvas");
             parent.appendChild(canvas);
-            var digit = new SSDigitDrawing(canvas);
+            var digitDrawing = new SSDigitDrawing(canvas);
+            this.digitDrawings.push(digitDrawing);
+            (function (i, self) {
+                digitDrawing.onClick(function(segment) {
+                    self.clickedDigitCallback(i, segment);
+                });
+            })(i, this);
+
+            // Add decimal dot if needed
+            if ((i == (nbrIntegers - 1)) && (nbrDecimals > 0)) {
+                var dotCanvas = document.createElement("canvas");
+                dotCanvas.setAttribute("class", "digit-canvas");
+                parent.appendChild(dotCanvas);
+                digitDrawing.drawDot(dotCanvas);
+            }
+        }
+
+        //////////////////////////////
+        // Setup image
+        var img = document.getElementById(imageId);
+        var canvas = document.getElementById(imageCanvasId);
+        var ctx = canvas.getContext("2d");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+        var self = this;
+        canvas.addEventListener('mousedown', function (e) {
+            self.clickedImageCallback(event.offsetX, event.offsetY);
+        });
+
+    }
+
+    clickedDigitCallback(digitIndex, segment) {
+        this.selectedDigitIndex = digitIndex;
+        this.selectedSegment = segment;
+        this.draw();
+    }
+
+    clickedImageCallback(x, y) {
+        alert(x + " " + y);
+    }
+
+    draw() {
+        for (var i = 0 ; i < this.digitDrawings.length ; i++) {
+            var dd = this.digitDrawings[i];
+            dd.resetStyle();
+            if (this.selectedDigitIndex == i) {
+                dd.setLineColor(this.selectedSegment , "red");
+                dd.setLineWidth(this.selectedSegment , 3);
+            }
+            dd.draw();
         }
     }
 }
@@ -217,17 +322,10 @@ class SSDigits {
 // Functions
 //////////////////////////////////////////////////////////
 window.onload = function() {
-    // Load image
-    var img = document.getElementById("ss-image");
-    var canvas = document.getElementById("ss-canvas");
-    var ctx = canvas.getContext("2d");
-    ctx.canvas.width = img.width;
-    ctx.canvas.height = img.height;
-    ctx.drawImage(img, 0, 0, img.width, img.height);
-
-    // Setup digits
-    var nbrInts = document.getElementById("integers").value;
-    digits = new SSDigits("digits", nbrInts, 0);
+    var nbrInts = parseInt(document.getElementById("integers").value);
+    var nbrDec = parseInt(document.getElementById("decimals").value);
+    var coordinates = new SSDigitCoordinateCollection(nbrInts, nbrDec);
+    digits = new SSDigits("digits", nbrInts, nbrDec, "ss-image", "ss-canvas");
 }
 function test() {
     var img = document.getElementById("ss-image");
