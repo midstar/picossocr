@@ -291,13 +291,41 @@ class SSDigitData {
             }
         }
         // Set segment if closer to frontColor than background
-        console.log("back: " + backColor + " front: " + frontColor);
         this.segmentSet[Segment.Back] = false;
         for (var i = 1 ; i < NBR_SEGMENTS ; i++) {
             var toBack = this.segmentColor[i].getDifference(backColor);
             var toFront = this.segmentColor[i].getDifference(frontColor);
             this.segmentSet[i] = (toFront < toBack);
-            console.log("2back: " + toBack + " 2front: " + toFront + " set: " + this.segmentSet[i]);
+        }
+    }
+
+    getCoordinateString() {
+        var result = "";
+        for (var i = 0 ; i < NBR_SEGMENTS ; i++) {
+            var coordinate = this.segmentCoordinate[i];
+            if (coordinate == undefined) {
+                result = result + ";";
+            } else {
+                result = result + coordinate.x + "," + coordinate.y + ";";
+            }
+        }
+        return result;
+    }
+
+    setCoordinateString(str) {
+        var cordStr = str.split(";");
+        if (cordStr.length != (NBR_SEGMENTS + 1)) {
+            alert("Invalid coordinate string (nbr segments was " + cordStr.length + "): " + str);
+            return;
+        }
+        for (var i = 0 ; i < NBR_SEGMENTS ; i++) {
+            var xy = cordStr[i].split(",");
+            this.segmentCoordinate[i] = undefined;
+            if (xy.length == 2) {
+                var x = parseInt(xy[0]);
+                var y = parseInt(xy[1]);
+                this.segmentCoordinate[i] = new Coordinate(x,y);
+            }
         }
     }
 }
@@ -326,6 +354,35 @@ class SSDigitDataCollection {
     getDigit(index) {
         return this.digits[index];
     }
+
+    getCoordinateString() {
+        var result = "";
+        for (var i = 0; i < this.digits.length; i++) {
+            result = result + this.digits[i].getCoordinateString() + "\n";
+            if (i == this.decimalPosition) {
+                result = result + ".\n";
+            }
+        }
+        return result;
+    }
+
+    setCoordinateString(str) {
+        this.digits = [];
+        this.decimalPosition = undefined;
+        var digitStr = str.split("\n");
+        for (var i = 0 ; i < digitStr.length ; i++) {
+            if (digitStr[i] == ".") {
+                this.decimalPosition = i - 1;
+            } else if (digitStr[i] == "") {
+                continue;
+            }
+            else {
+                var digit = new SSDigitData();
+                digit.setCoordinateString(digitStr[i]);
+                this.digits.push(digit);
+            }
+        }
+    }
 }
 
 //////////////////////////////////////////////////////////
@@ -339,7 +396,12 @@ class SSDigits {
     selectedDigitIndex = undefined;
     selectedSegment = undefined;
 
+    parentId = undefined;
+    previewParentId = undefined;
+
     constructor(parentId, previewParentId, digits, imageId, imageCanvasId) {
+        this.parentId = parentId;
+        this.previewParentId = previewParentId;
         this.digits = digits;
 
         //////////////////////////////
@@ -361,7 +423,13 @@ class SSDigits {
             self.clickedImageCallback(event.offsetX, event.offsetY);
         });
         this.drawImage();
+        this.draw();
 
+    }
+
+    destroy() {
+        document.getElementById(this.parentId).innerHTML = "";
+        document.getElementById(this.previewParentId).innerHTML = "";
     }
 
     setupDigitDrawings(parentId, digitDrawings, digits, installCallback, lineColor) {
@@ -416,6 +484,13 @@ class SSDigits {
         this.draw();
     }
 
+    setImageColors() {
+        for (var di = 0 ; di < digits.nbrDigits() ; di++) {
+            for (var si = 0 ; si < NBR_SEGMENTS ; si++) {
+            }
+        }
+    }
+
     drawImage() {
         var img = this.image;
         this.imageCtx.drawImage(img, 0, 0, img.width, img.height);
@@ -455,9 +530,8 @@ class SSDigits {
             var pdd = this.previewDigitDrawings[di];
             pdd.resetStyle();
             for (var si = 0 ; si < NBR_SEGMENTS ; si++) {
-                pdd.setColor("blue");
                 if (digit.getSet(si)) {
-                    pdd.setColor("black");
+                    pdd.setColor(si, "black");
                 }
             }
             pdd.draw(); 
@@ -489,75 +563,23 @@ class SSDigits {
 //////////////////////////////////////////////////////////
 // Functions
 //////////////////////////////////////////////////////////
+var globDigitsCollection = undefined;
+var globDigits = undefined;
 window.onload = function() {
     var nbrInts = parseInt(document.getElementById("integers").value);
     var nbrDec = parseInt(document.getElementById("decimals").value);
-    var digits = new SSDigitDataCollection(nbrInts, nbrDec);
-    digits = new SSDigits("digits", "digits-preview", digits, "ss-image", "ss-canvas");
-}
-function test() {
-    var img = document.getElementById("ss-image");
-    var canvas = document.getElementById("ss-canvas");
-    var ctx = canvas.getContext("2d");
-    ctx.canvas.width = img.width;
-    ctx.canvas.height = img.height;
-    ctx.drawImage(img, 0, 0, img.width, img.height);
-    canvas.addEventListener('mousedown', function (e) {
-        drawMarker(ctx, event.offsetX, event.offsetY, "red");
-        return;
-        var imgD = ctx.getImageData(event.offsetX - Math.round(NBR_PIXELS_PER_SEGMENT_X/2),
-                                    event.offsetY - Math.round(NBR_PIXELS_PER_SEGMENT_Y/2),
-                                    NBR_PIXELS_PER_SEGMENT_X,
-                                    NBR_PIXELS_PER_SEGMENT_Y);
-        var canvasBg = document.getElementById("bakground-canvas-pixels");
-        var ctxBg = canvasBg.getContext("2d");
-        ctxBg.putImageData(imgD, 0, 0);
-        // Calculate average red, green and blue value
-        var pixels = imgD.data;
-        var r = 0, g = 0, b = 0, count = 0;
-        for (var i = 0; i < pixels.length; i+=4) {
-            r += pixels[i];
-            g += pixels[i+1];
-            b += pixels[i+2];
-            // i+3 gamma is no used
-            count += 1;
-        }
-        r = r / count;
-        b = b / count;
-        g = g / count;
-        var canvasCol = document.getElementById("bakground-canvas-color");
-        var ctxCol = canvasCol.getContext("2d");
-        var oldCol = ctxCol.fillStyle;
-        ctxCol.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
-        ctxCol.fillRect(0, 0, 1 ,1);
-        ctxCol.fillStyle = oldCol;
-    });
-    digit1 = new SSDigit("digit-canvas");
-    digit2 = new SSDigit("digit-canvasB");
-    digit2.setLineColor(Segment.Bottom, "red");
-    digit2.setLineWidth(Segment.Bottom, 3);
-    digit2.draw();
-    digit1.onClick(function (segment) {
-        alert(segment);
-    }); 
+    globDigitsCollection = new SSDigitDataCollection(nbrInts, nbrDec);
+    globDigits = new SSDigits("digits", "digits-preview", globDigitsCollection, "ss-image", "ss-canvas");
 }
 
-function drawMarker(ctx, x, y, color) {
-    ctx.strokeStyle = color;
+function btnGetConfig() {
+    document.getElementById("coordinate-area").value = globDigitsCollection.getCoordinateString();
+}
 
-    // Horizontal
-    ctx.beginPath();
-    ctx.moveTo(x - NBR_PIXELS_PER_SEGMENT_X, y);
-    ctx.lineTo(x + NBR_PIXELS_PER_SEGMENT_X, y);
-    ctx.closePath(); 
-    ctx.stroke();
-
-    // Vertical
-    ctx.beginPath();
-    ctx.moveTo(x, y - NBR_PIXELS_PER_SEGMENT_Y);
-    ctx.lineTo(x, y + NBR_PIXELS_PER_SEGMENT_Y);
-    ctx.closePath();  
-    ctx.stroke();
+function btnSetConfig() {
+    globDigits.destroy();
+    globDigitsCollection.setCoordinateString(document.getElementById("coordinate-area").value);
+    globDigits = new SSDigits("digits", "digits-preview", globDigitsCollection, "ss-image", "ss-canvas");
 }
 
 
@@ -578,13 +600,11 @@ function drawMarker(ctx, x, y, color) {
         <br>
         <div id="digits" style="display:inline-block; vertical-align:top;">
         </div>
+        <br>
         <div id="digits-preview" style="display:inline-block; vertical-align:top;">
         </div>
-        <br>
-        <div style="border-style: solid;">
-            Bakground
-            <canvas id="bakground-canvas-pixels" style="border-style: solid; width: 30; height: 30; vertical-align:middle;" height="3" width="3"></canvas>
-            <canvas id="bakground-canvas-color" style="border-style: solid; width: 30; height: 30; vertical-align:middle;" height="1" width="1"></canvas>
-        </div>
     </div>
+    <textarea id="coordinate-area" rows="10" cols="100"></textarea>
+    <button onclick="btnGetConfig();">Get config</button>
+    <button onclick="btnSetConfig();">Set config</button>
 </html>
