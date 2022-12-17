@@ -120,7 +120,11 @@ class SSDigitDrawing {
         var w = this.width;
         var h = this.height;
 
-        // Fill background (also clears at redraw)
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.beginPath();
+
+        // Fill background 
         this.ctx.fillStyle=this.segmentColor[Segment.Back];
         this.ctx.strokeStyle = this.segmentLineColor[Segment.Back];
         this.ctx.lineWidth = this.segmentLineWidth[Segment.Back];
@@ -423,7 +427,9 @@ class SSDigits {
             self.clickedImageCallback(event.offsetX, event.offsetY);
         });
         this.drawImage();
+        this.setPixelColors()
         this.draw();
+
 
     }
 
@@ -469,24 +475,28 @@ class SSDigits {
         if (this.selectedSegment != undefined) {
             // Set coordinate
             this.digits.getDigit(this.selectedDigitIndex).setCoordinate(this.selectedSegment, x, y);
-
-            // Get color from image
             this.drawImage();
-            var imgD = this.imageCtx.getImageData(
-                x - Math.round(NBR_PIXELS_PER_SEGMENT_X/2),
-                y - Math.round(NBR_PIXELS_PER_SEGMENT_Y/2),
-                NBR_PIXELS_PER_SEGMENT_X,
-                NBR_PIXELS_PER_SEGMENT_Y);
-
-            // Set color
-            this.digits.getDigit(this.selectedDigitIndex).setColor(this.selectedSegment, imgD.data);
+            this.setPixelColors();
         }
         this.draw();
     }
 
-    setImageColors() {
-        for (var di = 0 ; di < digits.nbrDigits() ; di++) {
+    setPixelColors() {
+        for (var di = 0 ; di < this.digits.nbrDigits() ; di++) {
             for (var si = 0 ; si < NBR_SEGMENTS ; si++) {
+                var cord = this.digits.getDigit(di).getCoordinate(si);
+
+                if (cord != undefined) {            
+                    // Get color from image
+                    var imgD = this.imageCtx.getImageData(
+                        cord.x - Math.round(NBR_PIXELS_PER_SEGMENT_X/2),
+                        cord.y - Math.round(NBR_PIXELS_PER_SEGMENT_Y/2),
+                        NBR_PIXELS_PER_SEGMENT_X,
+                        NBR_PIXELS_PER_SEGMENT_Y);
+
+                    // Set color
+                    this.digits.getDigit(di).setColor(si, imgD.data);
+                }
             }
         }
     }
